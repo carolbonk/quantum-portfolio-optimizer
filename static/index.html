@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Quantum Portfolio Optimizer · QAOA × Black-Scholes</title>
+  <meta name="description" content="Pick a delta-hedged stock portfolio with the Quantum Approximate Optimization Algorithm (QAOA) and Black-Scholes option deltas." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚛️</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/style.css?v=3" />
+  <script src="https://cdn.plot.ly/plotly-basic-2.35.2.min.js" defer></script>
+  <script src="/static/app.js?v=3" defer></script>
+</head>
+<body>
+  <canvas id="field" aria-hidden="true"></canvas>
+  <div class="glow glow-a" aria-hidden="true"></div>
+  <div class="glow glow-b" aria-hidden="true"></div>
+
+  <header class="nav">
+    <a class="brand" href="#top">
+      <svg viewBox="0 0 48 48" class="atom" aria-hidden="true">
+        <circle cx="24" cy="24" r="4" />
+        <ellipse cx="24" cy="24" rx="20" ry="8" />
+        <ellipse cx="24" cy="24" rx="20" ry="8" transform="rotate(60 24 24)" />
+        <ellipse cx="24" cy="24" rx="20" ry="8" transform="rotate(120 24 24)" />
+      </svg>
+      <span>Quantum<b>Portfolio</b></span>
+    </a>
+    <nav>
+      <a href="#optimizer">Optimizer</a>
+      <a href="#how">How it works</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <span class="pill"><span class="dot"></span> QAOA on a simulated quantum circuit · Qiskit</span>
+      <h1>Pick a <span class="grad">delta-hedged</span> portfolio<br />with a quantum algorithm</h1>
+      <p>Each stock becomes a qubit. QAOA searches for the highest-return basket while Black-Scholes call deltas keep your options exposure under a limit you set. An exact classical search checks every answer.</p>
+    </section>
+
+    <section id="optimizer" class="app-grid">
+      <aside class="panel controls">
+        <div class="panel-head">
+          <h2>Build your universe</h2>
+          <span class="muted small" id="asset-count"></span>
+        </div>
+
+        <div class="chips" id="presets" role="tablist" aria-label="Scenarios"></div>
+
+        <div class="table-wrap">
+          <table class="assets">
+            <thead>
+              <tr><th>Ticker</th><th>Price</th><th>Strike</th><th>Return %</th><th>Vol %</th><th title="Black-Scholes call delta">Δ</th><th></th></tr>
+            </thead>
+            <tbody id="asset-rows"></tbody>
+          </table>
+        </div>
+        <button class="ghost" id="add-asset" type="button">+ Add asset</button>
+
+        <div class="field">
+          <label for="budget">Portfolio size <output id="budget-out"></output></label>
+          <input type="range" id="budget" min="1" max="3" step="1" value="3" />
+        </div>
+
+        <div class="field">
+          <label>QAOA layers <span class="muted small">(p)</span></label>
+          <div class="segmented" id="reps" role="radiogroup">
+            <button type="button" data-v="1">1</button><button type="button" data-v="2" class="on">2</button><button type="button" data-v="3">3</button><button type="button" data-v="4">4</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="row-between">
+            <label for="use-delta">Cap portfolio delta</label>
+            <label class="switch"><input type="checkbox" id="use-delta" checked /><span></span></label>
+          </div>
+          <div id="delta-box">
+            <label for="delta" class="sub">Max Σ delta <output id="delta-out"></output></label>
+            <input type="range" id="delta" min="0.2" max="5" step="0.05" value="1.6" />
+            <p class="hint" id="delta-hint"></p>
+          </div>
+        </div>
+
+        <details class="advanced">
+          <summary>Option assumptions</summary>
+          <div class="field">
+            <label for="expiry">Expiry <output id="expiry-out"></output></label>
+            <input type="range" id="expiry" min="1" max="24" step="1" value="6" />
+          </div>
+          <div class="field">
+            <label for="rate">Risk-free rate <output id="rate-out"></output></label>
+            <input type="range" id="rate" min="0" max="8" step="0.25" value="2" />
+          </div>
+        </details>
+
+        <button class="run" id="run" type="button">
+          <span class="run-label">Run quantum optimization</span>
+          <span class="run-busy"><span class="spinner"></span> Sampling the circuit…</span>
+        </button>
+        <p class="error" id="error" role="alert"></p>
+      </aside>
+
+      <section class="results" aria-live="polite">
+        <div class="verdict" id="verdict"></div>
+
+        <div class="kpis" id="kpis"></div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Selected portfolio</h2>
+            <span class="muted small">equal weight</span>
+          </div>
+          <div class="holdings" id="holdings"></div>
+        </div>
+
+        <div class="panel">
+          <div class="tabs" role="tablist" id="chart-tabs">
+            <button type="button" data-tab="dist" class="on">Measurements</button>
+            <button type="button" data-tab="risk">Risk map</button>
+            <button type="button" data-tab="conv">Convergence</button>
+            <button type="button" data-tab="alloc">Allocation</button>
+            <button type="button" data-tab="circuit">Circuit</button>
+          </div>
+          <p class="chart-caption" id="chart-caption"></p>
+          <div class="chart" id="chart"></div>
+          <div class="circuit" id="circuit" hidden></div>
+        </div>
+
+        <div class="panel insight">
+          <h2>What happened</h2>
+          <div id="insight"></div>
+        </div>
+
+        <div class="loading" id="loading" hidden>
+          <div class="wave"><span></span><span></span><span></span><span></span><span></span></div>
+          <p>Running QAOA…</p>
+        </div>
+      </section>
+    </section>
+
+    <section id="how" class="how">
+      <h2 class="section-title">How it works</h2>
+      <div class="steps">
+        <article class="step"><span class="num">01</span><h3>Price the risk</h3><p>Black-Scholes gives each stock's call option a delta, N(d₁): how many dollars the option gains when the stock rises $1.</p></article>
+        <article class="step"><span class="num">02</span><h3>Encode as qubits</h3><p>Each stock is one qubit (1 = buy). An XY mixer and a Dicke start state keep exactly k stocks selected. The delta cap becomes a QUBO penalty with a few slack qubits.</p></article>
+        <article class="step"><span class="num">03</span><h3>Run QAOA</h3><p>COBYLA tunes alternating cost and mixer layers so high-return, feasible portfolios are measured more often. The best valid measurement is the answer.</p></article>
+        <article class="step"><span class="num">04</span><h3>Verify classically</h3><p>For up to 8 assets an exhaustive search is instant, so every QAOA answer is checked against the true optimum.</p></article>
+      </div>
+      <p class="note">Data is illustrative, not live market data, and nothing here is investment advice. The quantum circuit runs on Qiskit Aer, a classical simulator, so it is slower than the exhaustive search at this size. The value is in the formulation, which carries over to quantum hardware.</p>
+    </section>
+  </main>
+
+  <footer>
+    <span>Built by <b>CarolBonk</b></span>
+    <span class="muted">Qiskit · Qiskit Aer · FastAPI · Plotly</span>
+  </footer>
+</body>
+</html>
